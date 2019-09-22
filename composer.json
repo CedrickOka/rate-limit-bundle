@@ -1,0 +1,39 @@
+{
+	"name" : "coka/rate-limit-bundle",
+	"type" : "symfony-bundle",
+	"license" : "MIT",
+	"description" : "Request rate limit",
+	"keywords" : [
+		"rate",
+		"limit"
+	],
+	"authors" : [{
+			"name" : "Cedrick Oka Baidai",
+			"email" : "okacedrick@gmail.com"
+		}
+	],
+	"autoload" : {
+		"psr-4" : {
+			"Oka\\RateLimitBundle\\" : "src"
+		}
+	},
+	"require" : {
+		"php" : ">=7.2",
+		"symfony/dependency-injection" : "^3.4 || ^4.0",
+		"symfony/config" : "^3.4 || ^4.0",
+		"symfony/http-kernel" : "^3.4 || ^4.0",
+		"coka/rest-request-validator-bundle": "^1.1",
+		"symfony/cache": "^4.3"
+	},
+	"extra" : {
+		"branch-alias" : {
+			"dev-master" : "0.x.x-dev"
+		},
+		"symfony" : {
+			"allow-contrib" : "true"
+		}
+	},
+	"support" : {
+		"docs" : "https://github.com/CedrickOka/rate-limit-bundle/blob/master/src/Resources/doc/index.md"
+	}
+}

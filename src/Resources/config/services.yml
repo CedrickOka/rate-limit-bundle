@@ -1,0 +1,6 @@
+services:
+    oka_rate_limit.request.event_listener:
+        class: Oka\RateLimitBundle\EventListener\RequestListener
+        arguments: ['@security.token_storage', '@oka_rest_request_validator.error_response.factory', '@translator', '', [], '']
+        tags:
+          - {name: kernel.event_listener, event: kernel.request, method: onKernelRequest, priority: 255}
