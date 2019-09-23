@@ -19,11 +19,11 @@
 	},
 	"require" : {
 		"php" : ">=7.2",
-		"symfony/dependency-injection" : "^3.4 || ^4.0",
+		"symfony/cache" : "^3.4 || ^4.0",
 		"symfony/config" : "^3.4 || ^4.0",
+		"symfony/dependency-injection" : "^3.4 || ^4.0",
 		"symfony/http-kernel" : "^3.4 || ^4.0",
-		"coka/rest-request-validator-bundle": "^1.1",
-		"symfony/cache": "^4.3"
+		"coka/rest-request-validator-bundle" : "^1.1"
 	},
 	"extra" : {
 		"branch-alias" : {
