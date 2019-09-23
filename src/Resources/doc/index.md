@@ -74,6 +74,7 @@ Add the following configuration to your `config/packages/oka_rate_limit.yaml`.
 ``` yaml
 # config/packages/oka_rate_limit.yaml
 oka_rate_limit:
-    access_control:
+    cache_pool_id: cache.app
+    configs:
         - { path: '.*' }
 ```

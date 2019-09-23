@@ -25,9 +25,15 @@ class OkaCORSExtension extends Extension
 		$loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
 		$loader->load('services.yml');
 		
-		$definition = $container->getDefinition('oka_rate_limit.request.event_listener');
-		$definition->replaceArgument(3, new Reference($config['cache_pool_id']));
-		$definition->replaceArgument(4, $config['access_control']);
-		$definition->replaceArgument(5, $config['time_zone']);
+		$cachePoolReference = new Reference($config['cache_pool_id']);
+		
+		$requestListener = $container->getDefinition('oka_rate_limit.request.event_listener');
+		$requestListener->replaceArgument(3, $cachePoolReference);
+		$requestListener->replaceArgument(4, $config['configs']);
+		$requestListener->replaceArgument(5, $config['time_zone']);
+		
+		$rateLimitListener = $container->getDefinition('oka_rate_limit.rate_limit.event_listener');
+		$rateLimitListener->replaceArgument(1, $cachePoolReference);
+		$rateLimitListener->replaceArgument(2, $config['configs']);
 	}
 }

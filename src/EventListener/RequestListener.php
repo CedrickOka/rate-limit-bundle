@@ -2,11 +2,15 @@
 namespace Oka\RateLimitBundle\EventListener;
 
 use Oka\RESTRequestValidatorBundle\Service\ErrorResponseFactory;
+use Oka\RateLimitBundle\RateLimitEvents;
+use Oka\RateLimitBundle\Events\RateLimitAttemptsUpdatedEvent;
+use Oka\RateLimitBundle\Events\RateLimitExceededEvent;
+use Oka\RateLimitBundle\Model\RateLimitConfig;
+use Oka\RateLimitBundle\Model\RateLimitConfigInterface;
+use Oka\RateLimitBundle\Util\RateLimitUtil;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Cache\CacheItem;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseEvent;
@@ -41,9 +45,9 @@ class RequestListener
 	protected $cachePool;
 	
 	/**
-	 * @var array $rateLimits
+	 * @var array $configs
 	 */
-	protected $rateLimits;
+	protected $configs;
 	
 	/**
 	 * @var string $timezone
@@ -52,16 +56,19 @@ class RequestListener
 	
 	/**
 	 * @param TokenStorageInterface $tokenStorage
+	 * @param TranslatorInterface $translator
+	 * @param ErrorResponseFactory $errorResponseFactory
 	 * @param CacheItemPoolInterface $cachePool
-	 * @param array $rateLimits
+	 * @param array $configs
+	 * @param string $timezone
 	 */
-	public function __construct(TokenStorageInterface $tokenStorage, TranslatorInterface $translator, ErrorResponseFactory $errorResponseFactory, CacheItemPoolInterface $cachePool, array $rateLimits = [], string $timezone = 'UTC')
+	public function __construct(TokenStorageInterface $tokenStorage, TranslatorInterface $translator, ErrorResponseFactory $errorResponseFactory, CacheItemPoolInterface $cachePool, array $configs = [], string $timezone = 'UTC')
 	{
 		$this->tokenStorage = $tokenStorage;
 		$this->translator = $translator;
 		$this->errorResponseFactory = $errorResponseFactory;
 		$this->cachePool = $cachePool;
-		$this->rateLimits = $rateLimits;
+		$this->configs = $configs;
 		$this->timezone = $timezone;
 	}
 	
@@ -78,156 +85,130 @@ class RequestListener
 		$account = null;
 		$request = $event->getRequest();
 		$clientIp = $request->getClientIp();
+		$now = RateLimitUtil::datetime(null, $this->timezone);
 		
 		if ($token = $this->tokenStorage->getToken()) {
 			$account = $token->getUsername();
 		}
 		
-		foreach ($this->rateLimits as $rateLimit) {
-			if (false === $this->match($request, $rateLimit)) {
+		foreach ($this->configs as $config) {
+			$config = RateLimitConfig::fromNodeConfig($config);
+			
+			if (false === RateLimitUtil::match($request, $config)) {
 				continue;
 			}
 			
-			$cacheItemKey = $this->createCacheItemKey($rateLimit, $clientIp, $account);
+			$cacheItemKey = RateLimitUtil::createCacheItemKey($config, $clientIp, $account);
+			$rateLimitExceededCacheItem = $this->cachePool->getItem($cacheItemKey . '.rate_limit_exceeded');
 			
-			if (true === $this->cachePool->getItem($cacheItemKey . '.exceeded')->isHit()) {
-				$event->setResponse($this->createRateLimitExceededResponse());
+			if (true === $rateLimitExceededCacheItem->isHit()) {
+				$this->handleRateLimitExceeded($event, $dispatcher, $config, ['X-Rate-Limit-Max-Sleep-Reset' => $rateLimitExceededCacheItem->get()]);
 				return;
 			}
 			
 			if ($account) {
-				if (true === in_array($account, $rateLimit['account_whitelist'])) {
+				if (true === in_array($account, $config->getAccountWhitelist())) {
 					$headers = ['X-Rate-Limit-Account' => 'Whitelist'];
 					break;
 				}
-				if (true === in_array($account, $rateLimit['account_blacklist'])) {
-					$event->setResponse($this->createRateLimitExceededResponse(['X-Rate-Limit-Account' => 'Blacklist']));
+				if (true === in_array($account, $config->getAccountBlacklist())) {
+					$this->handleRateLimitExceeded($event, $dispatcher, $config, ['X-Rate-Limit-Account' => 'Blacklist']);
 					return;
 				}
 			}
 			
-			if (true === in_array($clientIp, $rateLimit['client_ip_whitelist'])) {
+			if (true === in_array($clientIp, $config->getClientIpWhitelist())) {
 				$headers = ['X-Rate-Limit-Client-Ip' => 'Whitelist'];
 				break;
 			}
-			if (true === in_array($clientIp, $rateLimit['client_ip_blacklist'])) {
-				$event->setResponse($this->createRateLimitExceededResponse(['X-Rate-Limit-Client-Ip' => 'Blacklist']));
+			if (true === in_array($clientIp, $config->getClientIpBlacklist())) {
+				$this->handleRateLimitExceeded($event, $dispatcher, $config, ['X-Rate-Limit-Client-Ip' => 'Blacklist']);
 				return;
 			}
 			
-			$now = new \DateTime(null, new \DateTimeZone($this->timezone));
 			$cacheItem = $this->cachePool->getItem($cacheItemKey);
 			
 			if (true === $cacheItem->isHit()) {
 				$value = $cacheItem->get();
+				$reset = RateLimitUtil::datetime('@' . $value['reset'], $this->timezone);
 				++$value['count'];
 			} else {
-				$value = ['count' => 1, 'reset' => $now->getTimestamp() + $rateLimit['interval']];
+				$reset = RateLimitUtil::datetime('@' . ($now->getTimestamp() + $config->getInterval()), $this->timezone);
+				$value = ['count' => 1, 'reset' => $reset->getTimestamp()];
 				
 				if ($cacheItem instanceof CacheItem) {
 					$cacheItem->tag('oka_rate_limit');
 				}
 				
-				$cacheItem->expiresAt(new \DateTime('@' . $value['reset'], new \DateTimeZone($this->timezone)));
+				$cacheItem->expiresAt($reset);
 			}
 			
-			$remaining = $rateLimit['limit'] - $value['count'];
+			$remaining = $config->getLimit() - $value['count'];
 			
 			if (($now->getTimestamp() <= $value['reset'] && $remaining < 0)) {
-				if ($rateLimit['max_sleep_time'] > 0) {
-					$cacheItem = $this->cachePool->getItem($cacheItemKey . '.exceeded');
-					$cacheItem->expiresAfter($rateLimit['max_sleep_time']);
-					$cacheItem->set(true);
+				if ($config->getMaxSleepTime() > 0) {
+					$maxSleepReset = RateLimitUtil::datetime('@' . ($now->getTimestamp() + $config->getMaxSleepTime()), $this->timezone);
+					$rateLimitExceededCacheItem->set($maxSleepReset->format('c'));
+					$rateLimitExceededCacheItem->expiresAt($maxSleepReset);
 					
-					if ($cacheItem instanceof CacheItem) {
-						$cacheItem->tag('oka_rate_limit');
+					if ($rateLimitExceededCacheItem instanceof CacheItem) {
+						$rateLimitExceededCacheItem->tag('oka_rate_limit');
 					}
 					
-					$this->cachePool->save($cacheItem);
+					$this->cachePool->save($rateLimitExceededCacheItem);
+					$headers = ['X-Rate-Limit-Max-Sleep-Reset' => $cacheItem->get()];
 				}
 				
-				$event->setResponse($this->createRateLimitExceededResponse());
+				$this->handleRateLimitExceeded($event, $dispatcher, $config, $headers);
 				return;
 			}
 			
 			$cacheItem->set($value);
 			$this->cachePool->save($cacheItem);
 			
-			$headers = [
-					'X-Rate-Limit-Limit' => $rateLimit['limit'],
-					'X-Rate-Limit-Remaining' => $remaining,
-					'X-Rate-Limit-Reset' => $value['reset']
-			];
+			$rateLimitAttemptsUpdatedEvent = new RateLimitAttemptsUpdatedEvent($request, $config, $remaining, $reset);
+			$dispatcher->dispatch(RateLimitEvents::RATE_LIMIT_ATTEMPTS_UPDATED, $rateLimitAttemptsUpdatedEvent);
+			
+			if (!$headers = $rateLimitAttemptsUpdatedEvent->getHeaders()) {
+				$headers = [
+						'X-Rate-Limit-Limit' => $config->getLimit(),
+						'X-Rate-Limit-Remaining' => $remaining,
+						'X-Rate-Limit-Reset' => $reset->format('c')
+				];
+			}
 			break;
 		}
 		
 		if (false === empty($headers)) {
-			$this->addListenerKernelResponse($dispatcher, $headers);
+			$dispatcher->addListener(KernelEvents::RESPONSE, function(FilterResponseEvent $event) use ($headers){
+				if (false === $event->isMasterRequest()) {
+					return;
+				}
+				
+				$response = $event->getResponse();
+				
+				foreach ($headers as $key => $value) {
+					$response->headers->set($key, $value);
+				}
+			}, -255);
 		}
 	}
 	
 	/**
-	 * @param Request $request
-	 * @param array $rateLimit
-	 * @return boolean
-	 */
-	private function match(Request $request, array $rateLimit) :bool
-	{
-		if (true === isset($rateLimit['method']) && false === $request->isMethod($rateLimit['method'])) {
-			return false;
-		}
-		
-		if (true === isset($rateLimit['path']) && !preg_match(sprintf('#%s#', strtr($rateLimit['path'], '#', '\#')), $request->getPathInfo())) {
-			return false;
-		}
-		
-		return true;
-	}
-	
-	/**
-	 * @param array $rateLimit
-	 * @param string $clientIp
-	 * @param string $account
-	 * @return string
-	 */
-	private function createCacheItemKey(array $rateLimit, string $clientIp = null, string $account = null) :string
-	{
-		$key = sprintf('%s.%s.%s.%s', $rateLimit['method'] ?? '', $rateLimit['path'] ?? '', $clientIp ?? '', $account ?? '');
-		$key = strtr($key, [
-				'{' => '_', '}' => '_', 
-				'(' => '_', ')' => '_', 
-				'/' => '_', '\\\\' => '_', 
-				'@' => '_', ':' => '_'
-		]);
-		
-		return md5(strtolower($key));
-	}
-	
-	/**
-	 * @param array $headers
-	 * @return Response
-	 */
-	private function createRateLimitExceededResponse(array $headers = []) :Response
-	{
-		return $this->errorResponseFactory->create($this->translator->trans('Rate limit exceeded', [], 'oka_rate_limit'), 429, null, [], 429, $headers);
-	}
-	
-	/**
+	 * @param GetResponseEvent $event
 	 * @param EventDispatcherInterface $dispatcher
+	 * @param RateLimitConfigInterface $config
 	 * @param array $headers
 	 */
-	private function addListenerKernelResponse(EventDispatcherInterface $dispatcher, array $headers)
+	private function handleRateLimitExceeded(GetResponseEvent $event, EventDispatcherInterface $dispatcher, RateLimitConfigInterface $config, array $headers = [])
 	{
-		$dispatcher->addListener(KernelEvents::RESPONSE, function(FilterResponseEvent $event) use ($headers){
-			if (false === $event->isMasterRequest()) {
-				return;
-			}
-			
-			$response = $event->getResponse();
-			
-			foreach ($headers as $key => $value) {
-				$response->headers->set($key, $value);
-			}
-		});
+		$rateLimitExceededEvent = new RateLimitExceededEvent($event->getRequest(), $config);
+		$dispatcher->dispatch(RateLimitEvents::RATE_LIMIT_EXCEEDED, $rateLimitExceededEvent);
+		
+		if (!$response = $rateLimitExceededEvent->getResponse()) {
+			$response = $this->errorResponseFactory->create($this->translator->trans('Rate limit exceeded', [], 'oka_rate_limit'), 429, null, [], 429, $headers);
+		}
+		
+		$event->setResponse($response);
 	}
 }

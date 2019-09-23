@@ -58,7 +58,7 @@ class Configuration implements ConfigurationInterface
 						->prototype('scalar')->end()
 					->end()
 					
-					->arrayNode('access_control')
+					->arrayNode('configs')
 						->requiresAtLeastOneElement()
 						->useAttributeAsKey('name')
 						->prototype('array')
