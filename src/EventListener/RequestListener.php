@@ -18,9 +18,9 @@ use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInt
 use Symfony\Component\Translation\TranslatorInterface;
 
 /**
- * 
+ *
  * @author Cedrick Oka Baidai <okacedrick@gmail.com>
- * 
+ *
  */
 class RequestListener
 {
@@ -137,7 +137,7 @@ class RequestListener
 				$value = ['count' => 1, 'reset' => $reset->getTimestamp()];
 				
 				if ($cacheItem instanceof CacheItem) {
-					$cacheItem->tag('oka_rate_limit');
+					$this->tagCacheItem($cacheItem, 'oka_rate_limit');
 				}
 				
 				$cacheItem->expiresAt($reset);
@@ -152,12 +152,13 @@ class RequestListener
 					$rateLimitExceededCacheItem->expiresAt($maxSleepReset);
 					
 					if ($rateLimitExceededCacheItem instanceof CacheItem) {
-						$rateLimitExceededCacheItem->tag('oka_rate_limit');
+						$this->tagCacheItem($rateLimitExceededCacheItem, 'oka_rate_limit');
 					}
 					
 					$this->cachePool->save($rateLimitExceededCacheItem);
-					$headers = ['X-Rate-Limit-Max-Sleep-Reset' => $cacheItem->get()];
+					$headers = ['X-Rate-Limit-Max-Sleep-Reset' => $rateLimitExceededCacheItem->get()];
 				}
+				$this->cachePool->deleteItem($cacheItemKey);
 				
 				$this->handleRateLimitExceeded($event, $dispatcher, $config, $headers);
 				return;
@@ -192,6 +193,17 @@ class RequestListener
 				}
 			}, -255);
 		}
+	}
+	
+	/**
+	 * @param CacheItem $cacheItem
+	 * @param mixed $tag
+	 */
+	private function tagCacheItem(CacheItem $cacheItem, $tag)
+	{
+		try {
+			$cacheItem->tag($tag);
+		} catch (\Exception $e) {}
 	}
 	
 	/**

@@ -167,13 +167,7 @@ class RateLimitConfig implements RateLimitConfigInterface
 	
 	public static function fromNodeConfig(array $config) :self
 	{
-// 		if ($diff = array_diff(array_keys($config), ['limit', 'interval', 'max_sleep_time', 'account_blacklist', 'account_whitelist', 'client_ip_blacklist', 'client_ip_whitelist'])) {
-// 			throw new \InvalidArgumentException(sprintf('The following configuration are not supported "%s".', implode(', ', $diff)));
-// 		}
-		
-		if (false === isset($config['method']) 
-			|| false === isset($config['path'])
-			|| false === isset($config['limit'])
+		if (false === isset($config['limit'])
 			|| false === isset($config['interval']) 
 			|| false === isset($config['max_sleep_time'])
 			|| false === isset($config['account_blacklist'])

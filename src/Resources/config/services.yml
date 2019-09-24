@@ -1,13 +1,6 @@
 services:
     oka_rate_limit.request.event_listener:
         class: Oka\RateLimitBundle\EventListener\RequestListener
-        arguments: ['@security.token_storage', '@oka_rest_request_validator.error_response.factory', '@translator', '', [], '']
+        arguments: ['@security.token_storage', '@translator', '@oka_rest_request_validator.error_response.factory', '', [], '']
         tags:
           - {name: kernel.event_listener, event: kernel.request, method: onKernelRequest, priority: 255}
-
-
-    oka_rate_limit.rate_limit.event_listener:
-        class: Oka\RateLimitBundle\EventListener\RateLimitListener
-        arguments: ['@security.token_storage', '', []]
-        tags:
-          - {name: kernel.event_listener, event: oka_rate_limit.rate_limit_reset_attempts, method: onRateLimitResetAttempts, priority: 255}

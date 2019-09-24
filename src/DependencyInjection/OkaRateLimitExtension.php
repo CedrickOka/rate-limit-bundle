@@ -12,7 +12,7 @@ use Symfony\Component\DependencyInjection\Reference;
  *
  * @link http://symfony.com/doc/current/cookbook/bundles/extension.html
  */
-class OkaCORSExtension extends Extension
+class OkaRateLimitExtension extends Extension
 {
 	/**
 	 * {@inheritdoc}
@@ -31,9 +31,5 @@ class OkaCORSExtension extends Extension
 		$requestListener->replaceArgument(3, $cachePoolReference);
 		$requestListener->replaceArgument(4, $config['configs']);
 		$requestListener->replaceArgument(5, $config['time_zone']);
-		
-		$rateLimitListener = $container->getDefinition('oka_rate_limit.rate_limit.event_listener');
-		$rateLimitListener->replaceArgument(1, $cachePoolReference);
-		$rateLimitListener->replaceArgument(2, $config['configs']);
 	}
 }
