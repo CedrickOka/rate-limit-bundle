@@ -25,10 +25,8 @@ class OkaRateLimitExtension extends Extension
 		$loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
 		$loader->load('services.yml');
 		
-		$cachePoolReference = new Reference($config['cache_pool_id']);
-		
 		$requestListener = $container->getDefinition('oka_rate_limit.request.event_listener');
-		$requestListener->replaceArgument(3, $cachePoolReference);
+		$requestListener->replaceArgument(3, new Reference($config['cache_pool_id']));
 		$requestListener->replaceArgument(4, $config['configs']);
 		$requestListener->replaceArgument(5, $config['time_zone']);
 	}

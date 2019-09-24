@@ -59,8 +59,6 @@ class Configuration implements ConfigurationInterface
 					->end()
 					
 					->arrayNode('configs')
-// 						->requiresAtLeastOneElement()
-// 						->useAttributeAsKey('name')
 						->ignoreExtraKeys()
 						->prototype('array')
 							->children()

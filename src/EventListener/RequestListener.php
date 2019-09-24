@@ -5,6 +5,7 @@ use Oka\RESTRequestValidatorBundle\Service\ErrorResponseFactory;
 use Oka\RateLimitBundle\RateLimitEvents;
 use Oka\RateLimitBundle\Events\RateLimitAttemptsUpdatedEvent;
 use Oka\RateLimitBundle\Events\RateLimitExceededEvent;
+use Oka\RateLimitBundle\Events\RateLimitResetAttemptsEvent;
 use Oka\RateLimitBundle\Model\RateLimitConfig;
 use Oka\RateLimitBundle\Model\RateLimitConfigInterface;
 use Oka\RateLimitBundle\Util\RateLimitUtil;
@@ -98,8 +99,8 @@ class RequestListener
 				continue;
 			}
 			
-			$cacheItemKey = RateLimitUtil::createCacheItemKey($config, $clientIp, $account);
-			$rateLimitExceededCacheItem = $this->cachePool->getItem($cacheItemKey . '.rate_limit_exceeded');
+			$rateLimitCacheItemKey = RateLimitUtil::createCacheItemKey($config, $clientIp, $account);
+			$rateLimitExceededCacheItem = $this->cachePool->getItem($rateLimitCacheItemKey . '.rate_limit_exceeded');
 			
 			if (true === $rateLimitExceededCacheItem->isHit()) {
 				$this->handleRateLimitExceeded($event, $dispatcher, $config, ['X-Rate-Limit-Max-Sleep-Reset' => $rateLimitExceededCacheItem->get()]);
@@ -126,26 +127,34 @@ class RequestListener
 				return;
 			}
 			
-			$cacheItem = $this->cachePool->getItem($cacheItemKey);
+			$rateLimitCacheItem = $this->cachePool->getItem($rateLimitCacheItemKey);
 			
-			if (true === $cacheItem->isHit()) {
-				$value = $cacheItem->get();
-				$reset = RateLimitUtil::datetime('@' . $value['reset'], $this->timezone);
-				++$value['count'];
+			if (true === $rateLimitCacheItem->isHit()) {
+				$value = $rateLimitCacheItem->get();
+				
+				if ($value['reset'] > $now->getTimestamp()) {
+					$reset = RateLimitUtil::datetime('@' . $value['reset'], $this->timezone);
+					++$value['count'];
+				} else {
+					$reset = RateLimitUtil::datetime('@' . ($now->getTimestamp() + $config->getInterval()), $this->timezone);
+					$value = ['count' => 1, 'reset' => $reset->getTimestamp()];
+					
+					$rateLimitCacheItem->expiresAt($reset);
+				}
 			} else {
 				$reset = RateLimitUtil::datetime('@' . ($now->getTimestamp() + $config->getInterval()), $this->timezone);
 				$value = ['count' => 1, 'reset' => $reset->getTimestamp()];
 				
-				if ($cacheItem instanceof CacheItem) {
-					$this->tagCacheItem($cacheItem, 'oka_rate_limit');
+				if ($rateLimitCacheItem instanceof CacheItem) {
+					$this->tagCacheItem($rateLimitCacheItem, 'oka_rate_limit');
 				}
 				
-				$cacheItem->expiresAt($reset);
+				$rateLimitCacheItem->expiresAt($reset);
 			}
 			
 			$remaining = $config->getLimit() - $value['count'];
 			
-			if (($now->getTimestamp() <= $value['reset'] && $remaining < 0)) {
+			if ($now->getTimestamp() <= $value['reset'] && $remaining < 0) {
 				if ($config->getMaxSleepTime() > 0) {
 					$maxSleepReset = RateLimitUtil::datetime('@' . ($now->getTimestamp() + $config->getMaxSleepTime()), $this->timezone);
 					$rateLimitExceededCacheItem->set($maxSleepReset->format('c'));
@@ -158,14 +167,14 @@ class RequestListener
 					$this->cachePool->save($rateLimitExceededCacheItem);
 					$headers = ['X-Rate-Limit-Max-Sleep-Reset' => $rateLimitExceededCacheItem->get()];
 				}
-				$this->cachePool->deleteItem($cacheItemKey);
+				$this->cachePool->deleteItem($rateLimitCacheItemKey);
 				
 				$this->handleRateLimitExceeded($event, $dispatcher, $config, $headers);
 				return;
 			}
 			
-			$cacheItem->set($value);
-			$this->cachePool->save($cacheItem);
+			$rateLimitCacheItem->set($value);
+			$this->cachePool->save($rateLimitCacheItem);
 			
 			$rateLimitAttemptsUpdatedEvent = new RateLimitAttemptsUpdatedEvent($request, $config, $remaining, $reset);
 			$dispatcher->dispatch(RateLimitEvents::RATE_LIMIT_ATTEMPTS_UPDATED, $rateLimitAttemptsUpdatedEvent);
@@ -177,7 +186,17 @@ class RequestListener
 						'X-Rate-Limit-Reset' => $reset->format('c')
 				];
 			}
-			break;
+			
+			$dispatcher->addListener(RateLimitEvents::RATE_LIMIT_RESET_ATTEMPTS, function(RateLimitResetAttemptsEvent $event) use ($config, $rateLimitCacheItemKey){
+				if (false === RateLimitUtil::match($event->getRequest(), $config)) {
+					return;
+				}
+				
+				$this->cachePool->deleteItem($rateLimitCacheItemKey . '.rate_limit_exceeded');
+				$this->cachePool->deleteItem($rateLimitCacheItemKey);
+			});
+				
+				break;
 		}
 		
 		if (false === empty($headers)) {
