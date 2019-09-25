@@ -12,6 +12,7 @@ use Oka\RateLimitBundle\Util\RateLimitUtil;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Cache\CacheItem;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\Event\GetResponseEvent;
@@ -23,7 +24,7 @@ use Symfony\Component\Translation\TranslatorInterface;
  * @author Cedrick Oka Baidai <okacedrick@gmail.com>
  *
  */
-class RequestListener
+class RequestListener implements EventSubscriberInterface
 {
 	/**
 	 * @var TokenStorageInterface $tokenStorage
@@ -187,6 +188,7 @@ class RequestListener
 				];
 			}
 			
+			// Add listener rate limit reset attempts
 			$dispatcher->addListener(RateLimitEvents::RATE_LIMIT_RESET_ATTEMPTS, function(RateLimitResetAttemptsEvent $event) use ($config, $rateLimitCacheItemKey){
 				if (false === RateLimitUtil::match($event->getRequest(), $config)) {
 					return;
@@ -195,8 +197,8 @@ class RequestListener
 				$this->cachePool->deleteItem($rateLimitCacheItemKey . '.rate_limit_exceeded');
 				$this->cachePool->deleteItem($rateLimitCacheItemKey);
 			});
-				
-				break;
+			
+			break;
 		}
 		
 		if (false === empty($headers)) {
@@ -212,6 +214,13 @@ class RequestListener
 				}
 			}, -255);
 		}
+	}
+	
+	public static function getSubscribedEvents()
+	{
+		return [
+				KernelEvents::REQUEST => ['onKernelRequest', 28],
+		];
 	}
 	
 	/**
