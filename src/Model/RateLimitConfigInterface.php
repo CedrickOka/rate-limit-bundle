@@ -8,21 +8,21 @@ namespace Oka\RateLimitBundle\Model;
  */
 interface RateLimitConfigInterface
 {
-	public function getMethod() :?string;
-	
-	public function getPath() :?string;
-	
-	public function getLimit() :int;
-	
-	public function getInterval() :int;
-	
-	public function getMaxSleepTime() :int;
-	
-	public function getAccountBlacklist() :array;
-	
-	public function getAccountWhitelist() :array;
-	
-	public function getClientIpBlacklist() :array;
-	
-	public function getClientIpWhitelist() :array;
+    public function getMethod() :?string;
+    
+    public function getPath() :?string;
+    
+    public function getLimit() :int;
+    
+    public function getInterval() :int;
+    
+    public function getMaxSleepTime() :int;
+    
+    public function getAccountBlacklist() :array;
+    
+    public function getAccountWhitelist() :array;
+    
+    public function getClientIpBlacklist() :array;
+    
+    public function getClientIpWhitelist() :array;
 }

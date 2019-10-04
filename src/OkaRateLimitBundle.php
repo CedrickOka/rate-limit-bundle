@@ -3,4 +3,6 @@ namespace Oka\RateLimitBundle;
 
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 
-class OkaRateLimitBundle extends Bundle {}
+class OkaRateLimitBundle extends Bundle
+{
+}

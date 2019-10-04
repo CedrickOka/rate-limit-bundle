@@ -11,34 +11,34 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class RateLimitUtil
 {
-	public static function match(Request $request, RateLimitConfigInterface $config) :bool
-	{
-		if ($config->getMethod() && false === $request->isMethod($config->getMethod())) {
-			return false;
-		}
-		
-		if ($config->getPath() && !preg_match(sprintf('#%s#', strtr($config->getPath(), '#', '\#')), $request->getPathInfo())) {
-			return false;
-		}
-		
-		return true;
-	}
-	
-	public static function createCacheItemKey(RateLimitConfigInterface $config, string $clientIp = null, string $account = null) :string
-	{
-		$key = sprintf('%s.%s.%s.%s', $config->getMethod() ?? '', $config->getPath() ?? '', $clientIp ?? '', $account ?? '');
-		$key = strtr($key, [
-				'{' => '_', '}' => '_',
-				'(' => '_', ')' => '_',
-				'/' => '_', '\\\\' => '_',
-				'@' => '_', ':' => '_'
-		]);
-		
-		return md5(strtolower($key));
-	}
-	
-	public static function datetime(string $time = null, string $timezone = 'UTC') :\DateTime
-	{
-		return new \DateTime($time, new \DateTimeZone($timezone));
-	}
+    public static function match(Request $request, RateLimitConfigInterface $config) :bool
+    {
+        if ($config->getMethod() && false === $request->isMethod($config->getMethod())) {
+            return false;
+        }
+        
+        if ($config->getPath() && !preg_match(sprintf('#%s#', strtr($config->getPath(), '#', '\#')), $request->getPathInfo())) {
+            return false;
+        }
+        
+        return true;
+    }
+    
+    public static function createCacheItemKey(RateLimitConfigInterface $config, string $clientIp = null, string $account = null) :string
+    {
+        $key = sprintf('%s.%s.%s.%s', $config->getMethod() ?? '', $config->getPath() ?? '', $clientIp ?? '', $account ?? '');
+        $key = strtr($key, [
+                '{' => '_', '}' => '_',
+                '(' => '_', ')' => '_',
+                '/' => '_', '\\\\' => '_',
+                '@' => '_', ':' => '_'
+        ]);
+        
+        return md5(strtolower($key));
+    }
+    
+    public static function datetime(string $time = null, string $timezone = 'UTC') :\DateTime
+    {
+        return new \DateTime($time, new \DateTimeZone($timezone));
+    }
 }

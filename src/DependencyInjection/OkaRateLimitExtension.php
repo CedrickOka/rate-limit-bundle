@@ -14,20 +14,20 @@ use Symfony\Component\DependencyInjection\Reference;
  */
 class OkaRateLimitExtension extends Extension
 {
-	/**
-	 * {@inheritdoc}
-	 */
-	public function load(array $configs, ContainerBuilder $container)
-	{
-		$configuration = new Configuration();
-		$config = $this->processConfiguration($configuration, $configs);
-		
-		$loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
-		$loader->load('services.yml');
-		
-		$requestListener = $container->getDefinition('oka_rate_limit.request.event_listener');
-		$requestListener->replaceArgument(3, new Reference($config['cache_pool_id']));
-		$requestListener->replaceArgument(4, $config['configs']);
-		$requestListener->replaceArgument(5, $config['time_zone']);
-	}
+    /**
+     * {@inheritdoc}
+     */
+    public function load(array $configs, ContainerBuilder $container)
+    {
+        $configuration = new Configuration();
+        $config = $this->processConfiguration($configuration, $configs);
+        
+        $loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
+        $loader->load('services.yml');
+        
+        $requestListener = $container->getDefinition('oka_rate_limit.request.event_listener');
+        $requestListener->replaceArgument(3, new Reference($config['cache_pool_id']));
+        $requestListener->replaceArgument(4, $config['configs']);
+        $requestListener->replaceArgument(5, $config['time_zone']);
+    }
 }

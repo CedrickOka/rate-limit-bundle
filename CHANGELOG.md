@@ -1,6 +1,10 @@
 Changelog
 =========
 
+#### 1.2.0 (2019-10-04)
+
+* Added travis.yml for CI.
+
 #### 1.1.0 (2019-06-25)
 
 * Replaced listener by subscriber.
