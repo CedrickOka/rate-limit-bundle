@@ -1,6 +1,10 @@
 Changelog
 =========
 
+#### 1.3.0 (2020-06-09)
+
+* Upgraded symfony version to lts version 3.4 or 4.4.
+
 #### 1.2.0 (2019-10-04)
 
 * Added travis.yml for CI.
